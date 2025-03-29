@@ -1,0 +1,5 @@
+
+sklearn==0.0
+tensorboard==1.14.0
+tensorflow==2.5.2
+tensorflow-estimator==1.14.0
