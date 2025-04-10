@@ -37,16 +37,15 @@ def get_sandhi_dataset(datafile):
     count = [0, 0, 0, 0, 0, 0]
 
     for test in tests:
-        #print(test)
     
         if(test.find('=>') == -1):
-            continue;
+            continue
         inout = test.split('=>')
         words = inout[1].split('+')
     
         if(len(words) != 2):
             continue
-    
+
         word1 = words[0].strip()
         word1 = dr.read_devnagri_text(word1)
         slp1word1 = transliterate(word1, sanscript.DEVANAGARI, sanscript.SLP1)
@@ -112,7 +111,6 @@ def get_sandhi_dataset(datafile):
                 slp1word1 = slp1word1[start:]
                 slp1word2 = slp1word2[:newlen]
                 slp1expected = slp1expected[start:end]
-
                 datalist.append([slp1word1, slp1word2, slp1expected, fullslp1expected, start, end, fullslp1word1, fullslp1word2])
 
                 if(maxlen < end-start):
@@ -121,13 +119,10 @@ def get_sandhi_dataset(datafile):
                     minlen = end-start
 
                 count[end-start] = count[end-start] + 1
-            """
+            
             else:
-                print(slp1word1)
-                print(slp1word2)
-                print(slp1expected)
-                print("*****************************")
-            """
+                ghifjss=0
+            
         #print(slp1expected + ' => ' + slp1word1 + ' + ' + slp1word2)
         #print(expected + ' => ' + word1 + ' + ' + word2)
 

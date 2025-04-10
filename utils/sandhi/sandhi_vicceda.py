@@ -3,13 +3,19 @@ from train_test_data_prepare import get_xy_data
 from predict_sandhi_window_bilstm import train_predict_sandhi_window
 from split_sandhi_window_seq2seq_bilstm import train_sandhi_split
 from sklearn.model_selection import train_test_split
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 inwordlen = 5
 
-dl = get_xy_data("../../datasets/Sandhikosh/sandhiset.txt")
+dtrain = get_xy_data("../../datasets/Sandhikosh/sandhiset.txt")
+dtest = get_xy_data("../../datasets/Sandhikosh/s_copy.txt")
+print("jodshfjkldshfdjklsfhdsjklfhdsjklfh")
 
+# print(dtest)
+print("jodshfjkldshfdjklsfhdsjklfhdsjklfh")
 # Split the training and testing data
-dtrain, dtest = train_test_split(dl, test_size=0.2, random_state=1)
+# dtrain, dtest = train_test_split(dl, test_size=0.2, random_state=1)
 
 #predict the sandhi window
 sl = train_predict_sandhi_window(dtrain, dtest, 1)
@@ -33,12 +39,13 @@ results = train_sandhi_split(dtrain, dtest, 1)
 if len(results) == len(dtest):
     passed = 0
     failed = 0
-
+    print("Starting hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
     for i in range(len(dtest)):
         start = dtest[i][4]
         end = dtest[i][5]
         splitword = dtest[i][3][:start] + results[i] + dtest[i][3][end:]
         actword = dtest[i][6] + '+' + dtest[i][7]
+        print(splitword + "  "+ actword)
         if splitword == actword:
             passed = passed + 1
         else:
