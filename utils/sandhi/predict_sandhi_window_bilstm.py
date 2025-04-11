@@ -7,7 +7,7 @@ import train_test_data_prepare as sdp
 
 def train_predict_sandhi_window(dtrain, dtest, mode):
     batch_size = 64  # Batch size for training.
-    epochs = 40  # Number of epochs to train for.
+    epochs = 30  # Number of epochs to train for.
     latent_dim = 64  # Latent dimensionality of the encoding space.
     inwordlen = 5
 
@@ -131,7 +131,7 @@ def train_predict_sandhi_window(dtrain, dtest, mode):
     if mode == 0:
         print(passed)
         print(failed)
-        print(passed*100/(passed+failed))
+        # print(passed*100/(passed+failed))
 
     return startlist
 

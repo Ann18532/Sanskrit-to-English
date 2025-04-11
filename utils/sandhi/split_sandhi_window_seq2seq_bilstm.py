@@ -7,7 +7,7 @@ import train_test_data_prepare as sdp
 
 def train_sandhi_split(dtrain, dtest, mode):
     batch_size = 64  # Batch size for training.
-    epochs = 40  # Number of epochs to train for.
+    epochs = 30  # Number of epochs to train for.
     latent_dim = 128  # Latent dimensionality of the encoding space.
     inwordlen = 5
 
@@ -180,6 +180,7 @@ def train_sandhi_split(dtrain, dtest, mode):
     # 3) Repeat with the current target token and current states
     
     # Define sampling models
+    print("c0")
     encoder_model = Model(encoder_inputs, encoder_states)
     
     decoder_state_input_h = Input(shape=(latent_dim*2,))
@@ -189,7 +190,7 @@ def train_sandhi_split(dtrain, dtest, mode):
     decoder_states = [state_h, state_c]
     decoder_outputs = decoder_dense(decoder_outputs)
     decoder_model = Model([decoder_inputs] + decoder_states_inputs, [decoder_outputs] + decoder_states)
-    
+    print("c0.5")
     # Reverse-lookup token index to decode sequences back to something readable.
     reverse_input_char_index = dict((i, char) for char, i in token_index.items())
     reverse_target_char_index = dict((i, char) for char, i in token_index.items())
@@ -197,9 +198,12 @@ def train_sandhi_split(dtrain, dtest, mode):
     total = len(encoder_input_data)
     passed = 0
     results = []
+    print("c1")
     for seq_index in range(len(encoder_input_data)):
         # Take one sequence (part of the training set)
         # for trying out decoding.
+        print("start ")
+        print(seq_index)
         input_seq = encoder_input_data[seq_index: seq_index + 1]
         decoded_sentence = decode_sequence(input_seq)
         decoded_sentence = decoded_sentence.strip()
@@ -217,9 +221,14 @@ def train_sandhi_split(dtrain, dtest, mode):
                 print('Decoded sentence: ', decoded_sentence)
                 print('Expected sentence:', target_texts[seq_index])
             """
+        print("end ")
+        print(seq_index)
     if mode == 0:
-        print("Passed: "+str(passed)+'/'+str(total)+', '+str(passed*100/total))
+        # print("Passed: "+str(passed)+'/'+str(total)+', '+str(passed*100/total))
+        print("why here")
+        hihiihi=0
 
+    print("c2")
     return results
 
 #dl = sdp.get_xy_data("../sandhi/Data/sandhiset.txt")

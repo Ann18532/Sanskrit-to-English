@@ -9,10 +9,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 inwordlen = 5
 
 dtrain = get_xy_data("../../datasets/Sandhikosh/sandhiset.txt")
-dtest = get_xy_data("../../datasets/Sandhikosh/s_copy.txt")
+dtest = get_xy_data("../../datasets/Sandhikosh/sandhiset_copy.txt")
 print("jodshfjkldshfdjklsfhdsjklfhdsjklfh")
 
-# print(dtest)
+print(dtest)
 print("jodshfjkldshfdjklsfhdsjklfhdsjklfh")
 # Split the training and testing data
 # dtrain, dtest = train_test_split(dl, test_size=0.2, random_state=1)
@@ -52,7 +52,7 @@ if len(results) == len(dtest):
             failed = failed + 1
     print(passed)
     print(failed)
-    print(passed*100/(passed+failed))
+    # print(passed*100/(passed+failed))
 else:
     print("error")
 
