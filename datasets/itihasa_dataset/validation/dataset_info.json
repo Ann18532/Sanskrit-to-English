@@ -1,0 +1,65 @@
+{
+  "builder_name": "parquet",
+  "citation": "@inproceedings{aralikatte-etal-2021-itihasa,\n    title = \"Itihasa: A large-scale corpus for {S}anskrit to {E}nglish translation\",\n    author = \"Aralikatte, Rahul  and\n      de Lhoneux, Miryam  and\n      Kunchukuttan, Anoop  and\n      S{\\o}gaard, Anders\",\n    booktitle = \"Proceedings of the 8th Workshop on Asian Translation (WAT2021)\",\n    month = aug,\n    year = \"2021\",\n    address = \"Online\",\n    publisher = \"Association for Computational Linguistics\",\n    url = \"https://aclanthology.org/2021.wat-1.22\",\n    pages = \"191--197\",\n    abstract = \"This work introduces Itihasa, a large-scale translation dataset containing 93,000 pairs of Sanskrit shlokas and their English translations. The shlokas are extracted from two Indian epics viz., The Ramayana and The Mahabharata. We first describe the motivation behind the curation of such a dataset and follow up with empirical analysis to bring out its nuances. We then benchmark the performance of standard translation models on this corpus and show that even state-of-the-art transformer architectures perform poorly, emphasizing the complexity of the dataset.\",\n}\n",
+  "config_name": "Itihasa",
+  "dataset_name": "itihasa",
+  "dataset_size": 42772778,
+  "description": "A Sanskrit-English machine translation dataset.\n",
+  "download_checksums": {
+    "hf://datasets/rahular/itihasa@3ffc8fc96d399d8043a5591dcb833c7213d03013/Itihasa/train/0000.parquet": {
+      "num_bytes": 16377953,
+      "checksum": null
+    },
+    "hf://datasets/rahular/itihasa@3ffc8fc96d399d8043a5591dcb833c7213d03013/Itihasa/validation/0000.parquet": {
+      "num_bytes": 1393908,
+      "checksum": null
+    },
+    "hf://datasets/rahular/itihasa@3ffc8fc96d399d8043a5591dcb833c7213d03013/Itihasa/test/0000.parquet": {
+      "num_bytes": 2614908,
+      "checksum": null
+    }
+  },
+  "download_size": 20386769,
+  "features": {
+    "translation": {
+      "languages": [
+        "sn",
+        "en"
+      ],
+      "_type": "Translation"
+    }
+  },
+  "homepage": "http://www.rahular.com/itihasa/",
+  "license": "",
+  "size_in_bytes": 63159547,
+  "splits": {
+    "train": {
+      "name": "train",
+      "num_bytes": 34530156,
+      "num_examples": 75162,
+      "dataset_name": "itihasa"
+    },
+    "validation": {
+      "name": "validation",
+      "num_bytes": 2883586,
+      "num_examples": 6149,
+      "dataset_name": "itihasa"
+    },
+    "test": {
+      "name": "test",
+      "num_bytes": 5359036,
+      "num_examples": 11722,
+      "dataset_name": "itihasa"
+    }
+  },
+  "supervised_keys": {
+    "input": "sn",
+    "output": "en"
+  },
+  "version": {
+    "version_str": "1.0.0",
+    "major": 1,
+    "minor": 0,
+    "patch": 0
+  }
+}

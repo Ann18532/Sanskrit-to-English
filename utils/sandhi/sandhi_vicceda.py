@@ -3,13 +3,23 @@ from train_test_data_prepare import get_xy_data
 from predict_sandhi_window_bilstm import train_predict_sandhi_window
 from split_sandhi_window_seq2seq_bilstm import train_sandhi_split
 from sklearn.model_selection import train_test_split
+from datasets import load_dataset, load_from_disk
 import os
+from indic_transliteration import sanscript
+from indic_transliteration.sanscript import transliterate
+from dataset_processing import data_split as ds, datafetch as df
+
+def slp1_to_devanagari(slp1_text):
+    return transliterate(slp1_text, sanscript.SLP1, sanscript.DEVANAGARI)
+
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 inwordlen = 5
+dataset = load_from_disk("../../datasets/itihasa_dataset")
+
 
 dtrain = get_xy_data("../../datasets/Sandhikosh/sandhiset.txt")
-dtest = get_xy_data("../../datasets/Sandhikosh/sandhiset_copy.txt")
+dtest = df.get_xy_data(dataset)
 print("jodshfjkldshfdjklsfhdsjklfhdsjklfh")
 
 print(dtest)
@@ -35,15 +45,34 @@ else:
 
 #split the sandhi
 results = train_sandhi_split(dtrain, dtest, 1)
+sentences = {}
+
 
 if len(results) == len(dtest):
     passed = 0
     failed = 0
     print("Starting hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
     for i in range(len(dtest)):
+        if len(dtest[i][3]) <= 5 or dtest[i][9] == 0:
+            sans = slp1_to_devanagari(dtest[i][3])
+            print(sans)
+            sentences[dtest[i][8]] += " " + sans
+            continue
         start = dtest[i][4]
         end = dtest[i][5]
         splitword = dtest[i][3][:start] + results[i] + dtest[i][3][end:]
+        words = splitword.split('+')
+        if len(words) != 2:
+            sans = slp1_to_devanagari(dtest[i][3])
+            sentences[dtest[i][8]] += " " + sans
+            continue
+        word1 = words[0].strip()
+        word2 = words[1].strip()
+        print(word1)
+        print(word2)
+        word1 = slp1_to_devanagari(word1)
+        word2 = slp1_to_devanagari(word2)
+        sentences[dtest[i][8]] += " " + word1 + " " + word2
         actword = dtest[i][6] + '+' + dtest[i][7]
         print(splitword + "  "+ actword)
         if splitword == actword:
@@ -52,6 +81,7 @@ if len(results) == len(dtest):
             failed = failed + 1
     print(passed)
     print(failed)
+    print(sentences)
     # print(passed*100/(passed+failed))
 else:
     print("error")
