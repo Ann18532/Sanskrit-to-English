@@ -1,13 +1,14 @@
-from keras.models import Model
-from keras.layers import Input, LSTM, Dense, Bidirectional, Embedding, Reshape, Dropout
-from keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, Dense, Bidirectional, Embedding, Reshape, Dropout
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 import numpy as np
 from sklearn.model_selection import train_test_split
 import train_test_data_prepare as sdp
+import tensorflow as tf
 
 def train_predict_sandhi_window(dtrain, dtest, mode):
     batch_size = 64  # Batch size for training.
-    epochs = 3  # Number of epochs to train for.
+    epochs = 50  # Number of epochs to train for.
     latent_dim = 64  # Latent dimensionality of the encoding space.
     inwordlen = 5
 
@@ -41,20 +42,22 @@ def train_predict_sandhi_window(dtrain, dtest, mode):
     
     X_train = [[char2idx[c] for c in w] for w in inputs]
     X_train = pad_sequences(maxlen=maxlen, sequences=X_train, padding="post", value=char2idx['*'])
+    # Convert to one-hot encoding
+    X_train = tf.one_hot(X_train, depth=num_tokens, dtype=tf.float32)
     
     Y_train = targets
     Y_train = pad_sequences(maxlen=maxlen, sequences=Y_train, padding="post", value=0.0)
-    Y_train = np.array(Y_train).reshape(-1, maxlen, 1)
+    Y_train = np.array(Y_train).reshape(-1, maxlen, 1).astype(np.float32)
     
     inputs = []
     targets = []
     for data in dtest:
-        target = np.zeros(len(data[3]))
+        target = np.zeros(len(data[3]), dtype=np.float32)
         input_word = data[3]
     
         inputs.append(input_word)
         for i in range(data[4], data[5]):
-            target[i] = 1
+            target[i] = 1.0
         targets.append(target)
     
         for char in input_word:
@@ -63,19 +66,20 @@ def train_predict_sandhi_window(dtrain, dtest, mode):
     
     X_test = [[char2idx[c] for c in w] for w in inputs]
     X_test = pad_sequences(maxlen=maxlen, sequences=X_test, padding="post", value=char2idx['*'])
+    # Convert to one-hot encoding
+    X_test = tf.one_hot(X_test, depth=num_tokens, dtype=tf.float32)
     
     Y_test = targets
     Y_test = pad_sequences(maxlen=maxlen, sequences=Y_test, padding="post", value=0.0)
-    Y_test = np.array(Y_test).reshape(-1, maxlen, 1)
+    Y_test = np.array(Y_test).reshape(-1, maxlen, 1).astype(np.float32)
     
     print('Number of training samples:', len(X_train))
     print('Number of unique tokens:', num_tokens)
     
     # Define an input sequence and process it.
-    inputword = Input(shape=(maxlen,))
-    embed = Embedding(input_dim=num_tokens, output_dim=8, input_length=maxlen, mask_zero=True)(inputword)
+    inputword = Input(shape=(maxlen, num_tokens))
     bilstm = Bidirectional(LSTM(latent_dim, return_sequences=True, return_state=True))
-    out, forward_h, forward_c, backward_h, backward_c = bilstm(embed)
+    out, forward_h, forward_c, backward_h, backward_c = bilstm(inputword)
     outd = Dropout(0.5)(out)
     outputtarget = Dense(1, activation="sigmoid")(outd)
     
@@ -96,11 +100,11 @@ def train_predict_sandhi_window(dtrain, dtest, mode):
    
     startlist = []
     for i in range(X_test.shape[0]):
-        test = X_test[i].reshape((-1, maxlen))
+        test = tf.reshape(X_test[i], (-1, maxlen, num_tokens))
         res = model.predict(test)
-        res = res.reshape((maxlen))
-        dup = np.copy(res)
-        act = Y_test[i].reshape((maxlen))
+        res = tf.reshape(res, (maxlen,))
+        dup = tf.identity(res)
+        act = tf.reshape(Y_test[i], (maxlen,))
     
         maxsum = 0
         maxstart = 0

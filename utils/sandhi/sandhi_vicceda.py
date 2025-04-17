@@ -1,33 +1,44 @@
-#import train_test_data_prepare as sdp
+import os
+import tensorflow as tf
+
+# Disable TensorRT and GPU usage
+# os.environ["TF_TRT"] = "0"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+
+# Limit TensorFlow memory growth
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except RuntimeError as e:
+        print(e)
+
 from train_test_data_prepare import get_xy_data
 from predict_sandhi_window_bilstm import train_predict_sandhi_window
 from split_sandhi_window_seq2seq_bilstm import train_sandhi_split
 from sklearn.model_selection import train_test_split
 from datasets import load_dataset, load_from_disk
-import os
 from indic_transliteration import sanscript
 from indic_transliteration.sanscript import transliterate
-from dataset_processing import data_split as ds, datafetch as df
+import sys
+# sys.path.append('/home/aryan/lbp/Sanskrit/Sanskrit-to-English')
+from utils.dataset_processing import data_split as ds, datafetch as df
 
 def slp1_to_devanagari(slp1_text):
     return transliterate(slp1_text, sanscript.SLP1, sanscript.DEVANAGARI)
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 inwordlen = 5
-dataset = load_from_disk("../../datasets/itihasa_dataset")
+dataset = load_from_disk("./datasets/itihasa_dataset")
 
+dtrain = get_xy_data("./datasets/Sandhikosh/sandhiset.txt")
+dtest = ds.get_xy_data(dataset)
 
-dtrain = get_xy_data("../../datasets/Sandhikosh/sandhiset.txt")
-dtest = df.get_xy_data(dataset)
-print("jodshfjkldshfdjklsfhdsjklfhdsjklfh")
+print(f"Training data size: {len(dtrain)}")
+print(f"Testing data size: {len(dtest)}")
 
-print(dtest)
-print("jodshfjkldshfdjklsfhdsjklfhdsjklfh")
-# Split the training and testing data
-# dtrain, dtest = train_test_split(dl, test_size=0.2, random_state=1)
-
-#predict the sandhi window
+# Predict the sandhi window
 sl = train_predict_sandhi_window(dtrain, dtest, 1)
 
 if len(sl) == len(dtest):
@@ -43,17 +54,21 @@ if len(sl) == len(dtest):
 else:
     print("error")
 
-#split the sandhi
+# Split the sandhi
 results = train_sandhi_split(dtrain, dtest, 1)
 sentences = {}
-
+slpsentences = {}
 
 if len(results) == len(dtest):
     passed = 0
     failed = 0
     print("Starting hereeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee")
     for i in range(len(dtest)):
+        if dtest[i][8] not in sentences:
+            sentences[dtest[i][8]] = ""
+            slpsentences[dtest[i][8]] = ""
         if len(dtest[i][3]) <= 5 or dtest[i][9] == 0:
+            slpsentences[dtest[i][8]] += " " + dtest[i][3]
             sans = slp1_to_devanagari(dtest[i][3])
             print(sans)
             sentences[dtest[i][8]] += " " + sans
@@ -63,6 +78,7 @@ if len(results) == len(dtest):
         splitword = dtest[i][3][:start] + results[i] + dtest[i][3][end:]
         words = splitword.split('+')
         if len(words) != 2:
+            slpsentences[dtest[i][8]] += " " + dtest[i][3]
             sans = slp1_to_devanagari(dtest[i][3])
             sentences[dtest[i][8]] += " " + sans
             continue
@@ -70,6 +86,7 @@ if len(results) == len(dtest):
         word2 = words[1].strip()
         print(word1)
         print(word2)
+        slpsentences[dtest[i][8]] += " " + word1 + " " + word2
         word1 = slp1_to_devanagari(word1)
         word2 = slp1_to_devanagari(word2)
         sentences[dtest[i][8]] += " " + word1 + " " + word2
@@ -81,8 +98,8 @@ if len(results) == len(dtest):
             failed = failed + 1
     print(passed)
     print(failed)
+    print(slpsentences)
     print(sentences)
-    # print(passed*100/(passed+failed))
 else:
     print("error")
 

@@ -7,7 +7,7 @@ import numpy as np
 
 
 
-dataset = load_from_disk("../../datasets/itihasa_dataset")
+dataset = load_from_disk("./datasets/itihasa_dataset")
 
 swaras = ['a', 'A', 'i', 'I', 'u', 'U', 'e', 'E', 'o', 'O', 'f', 'F', 'x', 'X']
 vyanjanas = ['k', 'K', 'g', 'G', 'N', 
@@ -121,7 +121,7 @@ def get_test_dataset(dataset):
                     print("*****************************")
                 """
             else:
-                datalist.append([slp1word1, slp1word2, slp1expected, fullslp1expected, start, end, fullslp1word1, fullslp1word2, wd, 0])
+                datalist.append([slp1word1, slp1word2, slp1expected, fullslp1expected, max(start, 1), end, fullslp1word1, fullslp1word2, wd, 0])
             #print(slp1expected + ' => ' + slp1word1 + ' + ' + slp1word2)
             #print(expected + ' => ' + word1 + ' + ' + word2)
 
@@ -135,6 +135,3 @@ def get_xy_data(datafile):
     dl = get_test_dataset(datafile)
     return dl
 
-
-sl = get_xy_data(dataset)
-print(sl)

@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  sanskrit-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./datasets:/app/datasets
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]

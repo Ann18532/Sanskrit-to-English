@@ -1,5 +1,7 @@
-from keras.models import Model
-from keras.layers import Input, LSTM, Dense, Bidirectional, Concatenate
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import Input, LSTM, Dense, Bidirectional, Embedding, Reshape, Dropout
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.layers import Concatenate
 import numpy as np
 from sklearn.model_selection import train_test_split
 import train_test_data_prepare as sdp
@@ -7,7 +9,7 @@ import train_test_data_prepare as sdp
 
 def train_sandhi_split(dtrain, dtest, mode):
     batch_size = 64  # Batch size for training.
-    epochs = 3  # Number of epochs to train for.
+    epochs = 50  # Number of epochs to train for.
     latent_dim = 128  # Latent dimensionality of the encoding space.
     inwordlen = 5
 
