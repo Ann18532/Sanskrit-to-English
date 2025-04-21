@@ -68,6 +68,7 @@ termcolor==2.4.0
 threadpoolctl==3.5.0
 toml==0.10.2
 tqdm==4.67.1
+transformers
 typer==0.15.2
 typing-extensions==4.5.0
 tzdata==2025.2

@@ -40,8 +40,7 @@ def get_test_dataset(dataset):
     count = [0, 0, 0, 0, 0, 0]
 
     for wd in range(0, 3):
-        print(dataset['train'][wd])
-
+        # print(dataset['train'][wd])
         sentence = dataset['train'][wd]['translation']['sn'].strip()
         for wdd in sentence.split(' '):
             word1 = wdd.strip()
@@ -53,7 +52,7 @@ def get_test_dataset(dataset):
         
             slp1expected = slp1word1
             slp1expected = remove_nonslp1_chars(slp1expected)
-            print([slp1word1, slp1word2])
+            # print([slp1word1, slp1word2])
             if slp1word1 and slp1word2 and slp1expected:
                 total = total + 1
             else:
@@ -125,10 +124,6 @@ def get_test_dataset(dataset):
             #print(slp1expected + ' => ' + slp1word1 + ' + ' + slp1word2)
             #print(expected + ' => ' + word1 + ' + ' + word2)
 
-    print(total)
-    print(maxlen)
-    print(minlen)
-    print(count)
     return datalist
 
 def get_xy_data(datafile):

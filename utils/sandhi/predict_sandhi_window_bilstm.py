@@ -8,7 +8,7 @@ import tensorflow as tf
 
 def train_predict_sandhi_window(dtrain, dtest, mode):
     batch_size = 64  # Batch size for training.
-    epochs = 50  # Number of epochs to train for.
+    epochs = 3  # Number of epochs to train for.
     latent_dim = 64  # Latent dimensionality of the encoding space.
     inwordlen = 5
 
@@ -37,6 +37,7 @@ def train_predict_sandhi_window(dtrain, dtest, mode):
     * is used as padding character
     """
     characters.add('*')
+    characters.add('\\')
     char2idx = dict([(char, i) for i, char in enumerate(characters)])
     num_tokens = len(characters)
     

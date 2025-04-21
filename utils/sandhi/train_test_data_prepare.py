@@ -120,16 +120,10 @@ def get_sandhi_dataset(datafile):
 
                 count[end-start] = count[end-start] + 1
             
-            else:
-                ghifjss=0
             
         #print(slp1expected + ' => ' + slp1word1 + ' + ' + slp1word2)
         #print(expected + ' => ' + word1 + ' + ' + word2)
 
-    print(total)
-    print(maxlen)
-    print(minlen)
-    print(count)
     return datalist
 
 def get_xy_data(datafile):

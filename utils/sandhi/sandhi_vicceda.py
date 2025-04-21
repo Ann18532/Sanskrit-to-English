@@ -18,7 +18,7 @@ from train_test_data_prepare import get_xy_data
 from predict_sandhi_window_bilstm import train_predict_sandhi_window
 from split_sandhi_window_seq2seq_bilstm import train_sandhi_split
 from sklearn.model_selection import train_test_split
-from datasets import load_dataset, load_from_disk
+from datasets import load_from_disk, DatasetDict, Dataset
 from indic_transliteration import sanscript
 from indic_transliteration.sanscript import transliterate
 import sys
@@ -31,6 +31,9 @@ def slp1_to_devanagari(slp1_text):
 
 inwordlen = 5
 dataset = load_from_disk("./datasets/itihasa_dataset")
+postprocess_dataset = DatasetDict()
+print(dataset.shape)
+print(dataset['train'][0]['translation'])
 
 dtrain = get_xy_data("./datasets/Sandhikosh/sandhiset.txt")
 dtest = ds.get_xy_data(dataset)
@@ -70,7 +73,6 @@ if len(results) == len(dtest):
         if len(dtest[i][3]) <= 5 or dtest[i][9] == 0:
             slpsentences[dtest[i][8]] += " " + dtest[i][3]
             sans = slp1_to_devanagari(dtest[i][3])
-            print(sans)
             sentences[dtest[i][8]] += " " + sans
             continue
         start = dtest[i][4]
@@ -84,8 +86,6 @@ if len(results) == len(dtest):
             continue
         word1 = words[0].strip()
         word2 = words[1].strip()
-        print(word1)
-        print(word2)
         slpsentences[dtest[i][8]] += " " + word1 + " " + word2
         word1 = slp1_to_devanagari(word1)
         word2 = slp1_to_devanagari(word2)
@@ -96,12 +96,12 @@ if len(results) == len(dtest):
             passed = passed + 1
         else:
             failed = failed + 1
-    print(passed)
-    print(failed)
+        
+        dataset['train'][dtest[i][8]]['translation']['sn'].map(sentences[dtest[i][8]])
+   
     print(slpsentences)
     print(sentences)
-else:
-    print("error")
-
-
-
+    
+dataset.save_to_disk("./datasets/processed_itihasa_dataset")
+dataset = load_from_disk("./datasets/processed_itihasa_dataset")
+print(dataset['train'][0]['translation'])
