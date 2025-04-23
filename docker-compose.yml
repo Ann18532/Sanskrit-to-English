@@ -7,6 +7,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./datasets:/app/datasets
+      - ./output:/app/output
     deploy:
       resources:
         reservations:

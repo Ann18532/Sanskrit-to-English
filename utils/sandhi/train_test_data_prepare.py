@@ -27,6 +27,7 @@ def remove_nonslp1_chars(word):
 
 def get_sandhi_dataset(datafile):
     datalist = []
+    tests = []
 
     with open(datafile) as fp:
         tests = fp.read().splitlines()

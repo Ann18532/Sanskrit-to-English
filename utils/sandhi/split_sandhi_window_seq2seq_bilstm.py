@@ -1,238 +1,180 @@
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, LSTM, Dense, Bidirectional, Embedding, Reshape, Dropout
-from tensorflow.keras.preprocessing.sequence import pad_sequences
-from tensorflow.keras.layers import Concatenate
-import numpy as np
-from sklearn.model_selection import train_test_split
-import train_test_data_prepare as sdp
+import os
+import pickle
+import faulthandler
 
+# Enable C‐level backtraces on segfault/abort
+faulthandler.enable()
+
+import numpy as np
+from tensorflow.keras.models import Model
+from tensorflow.keras.layers import (
+    Input, LSTM, Dense, Bidirectional,
+    Concatenate, Dropout
+)
 
 def train_sandhi_split(dtrain, dtest, mode):
-    batch_size = 64  # Batch size for training.
-    epochs = 3  # Number of epochs to train for.
-    latent_dim = 128  # Latent dimensionality of the encoding space.
-    inwordlen = 5
+    # ─── Hyperparameters ─────────────────────────────────────────────
+    batch_size = 128   # Batch size for training.
+    epochs     = 1     # Number of epochs to train for.
+    latent_dim = 128   # Latent dimensionality of the encoding space.
+    INF_BS     = 512   # Batch size for inference.
 
-    # Vectorize the data.
-    input_texts = []
-    target_texts = []
-    X_tests = []
-    Y_tests = []
-    characters = set()
+    # ─── 1) Build character set from train+test ──────────────────────
+    input_texts, target_texts = [], []
+    X_tests, Y_tests = [], []
+    chars = set()
 
-    for data in dtrain:
-        target_text = data[0] + '+' + data[1]
-        input_text = data[2]
-    
-        # We use "&" as the "start sequence" character for the targets, and "$" as "end sequence" character.
-        target_text = '&' + target_text + '$'
-        input_texts.append(input_text)
-        target_texts.append(target_text)
-        for char in input_text:
-            if char not in characters:
-                characters.add(char)
-        for char in target_text:
-            if char not in characters:
-                characters.add(char)
-    
-    for data in dtest:
-        target_text = data[0] + '+' + data[1]
-        input_text = data[2]
+    for src, join, inp, *rest in dtrain:
+        tgt = '&' + src + '+' + join + '$'
+        input_texts.append(inp)
+        target_texts.append(tgt)
+        chars.update(inp)
+        chars.update(tgt)
 
-        # We use "&" as the "start sequence" character for the targets, and "$" as "end sequence" character.
-        target_text = '&' + target_text + '$'
-        X_tests.append(input_text)
-        Y_tests.append(target_text)
-        for char in input_text:
-            if char not in characters:
-                characters.add(char)
-        for char in target_text:
-            if char not in characters:
-                characters.add(char)
-    
-    # Using '*' for padding 
-    characters.add('*')
-    
-    characters = sorted(list(characters))
+    for src, join, inp, *rest in dtest:
+        tgt = '&' + src + '+' + join + '$'
+        X_tests.append(inp)
+        Y_tests.append(tgt)
+        chars.update(inp)
+        chars.update(tgt)
+
+    chars.add('*')
+    characters = sorted(chars)
     num_tokens = len(characters)
-    max_encoder_seq_length = max([len(txt) for txt in input_texts])
-    max_decoder_seq_length = max([len(txt) for txt in target_texts])
-    
+    token_index = {c: i for i, c in enumerate(characters)}
+    reverse_target_char_index = {i: c for c, i in token_index.items()}
+
+    max_encoder_seq_length = max(len(s) for s in input_texts)
+    max_decoder_seq_length = max(len(s) for s in target_texts)
+
     print('Number of samples:', len(input_texts))
     print('Number of unique tokens:', num_tokens)
     print('Max sequence length for inputs:', max_encoder_seq_length)
     print('Max sequence length for outputs:', max_decoder_seq_length)
-    
-    token_index = dict([(char, i) for i, char in enumerate(characters)])
-    
-    encoder_input_data = np.zeros((len(input_texts), max_encoder_seq_length, num_tokens), dtype='float32')
-    decoder_input_data = np.zeros((len(input_texts), max_decoder_seq_length, num_tokens), dtype='float32')
-    decoder_target_data = np.zeros((len(input_texts), max_decoder_seq_length, num_tokens), dtype='float32')
-    
-    for i, (input_text, target_text) in enumerate(zip(input_texts, target_texts)):
-        for t, char in enumerate(input_text):
-            encoder_input_data[i, t, token_index[char]] = 1.
-        encoder_input_data[i, t + 1:, token_index['*']] = 1.
-        for t, char in enumerate(target_text):
-            # decoder_target_data is ahead of decoder_input_data by one timestep
-            decoder_input_data[i, t, token_index[char]] = 1.
+
+    # ─── 2) One‐hot encode training data ─────────────────────────────
+    N = len(input_texts)
+    encoder_input_data = np.zeros((N, max_encoder_seq_length, num_tokens), dtype='float32')
+    decoder_input_data = np.zeros((N, max_decoder_seq_length, num_tokens), dtype='float32')
+    decoder_target_data = np.zeros((N, max_decoder_seq_length, num_tokens), dtype='float32')
+
+    for i, (inp, tgt) in enumerate(zip(input_texts, target_texts)):
+        # encoder
+        for t, ch in enumerate(inp):
+            encoder_input_data[i, t, token_index[ch]] = 1.
+        encoder_input_data[i, len(inp):, token_index['*']] = 1.
+
+        # decoder input & target (shifted)
+        for t, ch in enumerate(tgt):
+            decoder_input_data[i, t, token_index[ch]] = 1.
             if t > 0:
-                # decoder_target_data will be ahead by one timestep
-                # and will not include the start character.
-                decoder_target_data[i, t - 1, token_index[char]] = 1.
-        decoder_input_data[i, t + 1:, token_index['*']] = 1.
-        decoder_target_data[i, t:, token_index['*']] = 1.
-    
-    # Define an input sequence and process it.
-    encoder_inputs = Input(shape=(None, num_tokens))
-    encoder = Bidirectional(LSTM(latent_dim, return_state=True, dropout=0.5))
-    encoder_outputs, forward_h, forward_c, backward_h, backward_c = encoder(encoder_inputs)
-    state_h = Concatenate()([forward_h, backward_h])
-    state_c = Concatenate()([forward_c, backward_c])
-    
-    # We discard `encoder_outputs` and only keep the states.
+                decoder_target_data[i, t - 1, token_index[ch]] = 1.
+        decoder_input_data[i, len(tgt):, token_index['*']] = 1.
+        decoder_target_data[i, len(tgt):, token_index['*']] = 1.
+
+    # ─── 3) Define seq2seq model ───────────────────────────────────
+    encoder_inputs = Input(shape=(None, num_tokens), name='encoder_inputs')
+    encoder = Bidirectional(
+        LSTM(latent_dim, return_state=True, dropout=0.5),
+        name='encoder_bi'
+    )
+    _, fh, fc, bh, bc = encoder(encoder_inputs)
+    state_h = Concatenate()([fh, bh])
+    state_c = Concatenate()([fc, bc])
     encoder_states = [state_h, state_c]
-    
-    # Set up the decoder, using `encoder_states` as initial state.
-    decoder_inputs = Input(shape=(None, num_tokens))
-    
-    # We set up our decoder to return full output sequences,
-    # and to return internal states as well. We don't use the
-    # return states in the training model, but we will use them in inference.
-    decoder_lstm = LSTM(latent_dim*2, return_sequences=True, return_state=True, dropout=0.5)
-    decoder_outputs, _, _ = decoder_lstm(decoder_inputs, initial_state=encoder_states)
-    decoder_dense = Dense(num_tokens, activation='softmax')
-    decoder_outputs = decoder_dense(decoder_outputs)
-    
-    # Define the model that will turn
-    # `encoder_input_data` & `decoder_input_data` into `decoder_target_data`
-    model = Model([encoder_inputs, decoder_inputs], decoder_outputs)
-    
-    # Run training
-    model.compile(optimizer='rmsprop', loss='categorical_crossentropy', metrics=['accuracy'])
-    model.fit([encoder_input_data, decoder_input_data], decoder_target_data,
-              batch_size=batch_size,
-              epochs=epochs,
-              validation_split=0.1)
-    
-    # Save model
+
+    decoder_inputs = Input(shape=(None, num_tokens), name='decoder_inputs')
+    decoder_lstm = LSTM(
+        latent_dim * 2,
+        return_sequences=True,
+        return_state=True,
+        dropout=0.5,
+        name='decoder_lstm'
+    )
+    dec_out, _, _ = decoder_lstm(decoder_inputs, initial_state=encoder_states)
+    decoder_dense = Dense(num_tokens, activation='softmax', name='decoder_dense')
+    decoder_outputs = decoder_dense(dec_out)
+
+    model = Model([encoder_inputs, decoder_inputs], decoder_outputs, name='seq2seq')
+    model.compile(
+        optimizer='rmsprop',
+        loss='categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    model.summary()
+
+    # ─── 4) Train ───────────────────────────────────────────────────
+    model.fit(
+        [encoder_input_data, decoder_input_data],
+        decoder_target_data,
+        batch_size=batch_size,
+        epochs=epochs,
+        validation_split=0.1,
+        verbose=1
+    )
     model.save('bis2s.h5')
-    
-    def decode_sequence(input_seq):
-        # Encode the input as state vectors.
-        states_value = encoder_model.predict(input_seq)
-    
-        # Generate empty target sequence of length 1.
-        target_seq = np.zeros((1, 1, num_tokens))
-        # Populate the first character of target sequence with the start character.
-        target_seq[0, 0, token_index['&']] = 1.
-    
-        # Sampling loop for a batch of sequences
-        # (to simplify, here we assume a batch of size 1).
-        stop_condition = False
-        decoded_sentence = ''
-        while not stop_condition:
-            output_tokens, h, c = decoder_model.predict(
-                [target_seq] + states_value)
-    
-            # Sample a token
-            sampled_token_index = np.argmax(output_tokens[0, -1, :])
-            sampled_char = reverse_target_char_index[sampled_token_index]
-            decoded_sentence += sampled_char
-    
-            # Exit condition: either hit max length
-            # or find stop character.
-            if (sampled_char == '$' or
-               len(decoded_sentence) > max_decoder_seq_length):
-                stop_condition = True
-    
-            # Update the target sequence (of length 1).
-            target_seq = np.zeros((1, 1, num_tokens))
-            target_seq[0, 0, sampled_token_index] = 1.
-    
-            # Update states
-            states_value = [h, c]
-    
-        return decoded_sentence
-    
-    input_texts = []
-    target_texts = []
-    
-    input_texts = X_tests
-    target_texts = Y_tests
+    print("✔ Trained model saved to bis2s.h5")
 
-    for i in range(len(target_texts)):
-        target_texts[i] = target_texts[i][1:-1]
-    
-    encoder_input_data = np.zeros((len(input_texts), max_encoder_seq_length, num_tokens), dtype='float32')
-    
-    for i, input_text in enumerate(input_texts):
-        for t, char in enumerate(input_text):
-            if char not in token_index:
-                continue
-            encoder_input_data[i, t, token_index[char]] = 1.
-        encoder_input_data[i, t + 1:, token_index['*']] = 1.
-    
-    # Next: inference mode (sampling).
-    # Here's the drill:
-    # 1) encode input and retrieve initial decoder state
-    # 2) run one step of decoder with this initial state
-    # and a "start of sequence" token as target.
-    # Output will be the next target token
-    # 3) Repeat with the current target token and current states
-    
-    # Define sampling models
-    print("c0")
-    encoder_model = Model(encoder_inputs, encoder_states)
-    
-    decoder_state_input_h = Input(shape=(latent_dim*2,))
-    decoder_state_input_c = Input(shape=(latent_dim*2,))
-    decoder_states_inputs = [decoder_state_input_h, decoder_state_input_c]
-    decoder_outputs, state_h, state_c = decoder_lstm(decoder_inputs, initial_state=decoder_states_inputs)
-    decoder_states = [state_h, state_c]
-    decoder_outputs = decoder_dense(decoder_outputs)
-    decoder_model = Model([decoder_inputs] + decoder_states_inputs, [decoder_outputs] + decoder_states)
-    print("c0.5")
-    # Reverse-lookup token index to decode sequences back to something readable.
-    reverse_input_char_index = dict((i, char) for char, i in token_index.items())
-    reverse_target_char_index = dict((i, char) for char, i in token_index.items())
-    
-    total = len(encoder_input_data)
-    passed = 0
+    # ─── 5) Build inference sub-models ──────────────────────────────
+    encoder_model = Model(encoder_inputs, encoder_states, name='encoder_model')
+
+    state_h_in = Input(shape=(latent_dim * 2,), name='state_h')
+    state_c_in = Input(shape=(latent_dim * 2,), name='state_c')
+    dec_out2, h2, c2 = decoder_lstm(decoder_inputs, initial_state=[state_h_in, state_c_in])
+    dec_out2 = decoder_dense(dec_out2)
+    decoder_model = Model(
+        [decoder_inputs, state_h_in, state_c_in],
+        [dec_out2, h2, c2],
+        name='decoder_model'
+    )
+    print("✔ Sampling models ready")
+
+    # ─── 6) Batched inference ───────────────────────────────────────
+    total = len(X_tests)
     results = []
-    print("c1")
-    for seq_index in range(len(encoder_input_data)):
-        # Take one sequence (part of the training set)
-        # for trying out decoding.
-        print("start ")
-        print(seq_index)
-        input_seq = encoder_input_data[seq_index: seq_index + 1]
-        decoded_sentence = decode_sequence(input_seq)
-        decoded_sentence = decoded_sentence.strip()
-        decoded_sentence = decoded_sentence.strip('$')
-        results.append(decoded_sentence)
+    print(f"▶ Inference on {total} samples in batches of {INF_BS}")
+    for start in range(0, total, INF_BS):
+        end = min(start + INF_BS, total)
+        print(f"  • Encoding batch {start}-{end-1} of {total}")
 
-        if mode == 0:
-            if decoded_sentence == target_texts[seq_index]:
-                passed = passed + 1
-            """
-            else:
-                print(str(seq_index)+'/'+str(total))
-                print('-')
-                print('Input sentence:   ', input_texts[seq_index])
-                print('Decoded sentence: ', decoded_sentence)
-                print('Expected sentence:', target_texts[seq_index])
-            """
-        print("end ")
-        print(seq_index)
-    if mode == 0:
-        # print("Passed: "+str(passed)+'/'+str(total)+', '+str(passed*100/total))
-        print("why here")
-        hihiihi=0
+        # one-hot encode this batch
+        batch_size = end - start
+        Xb = np.zeros((batch_size, max_encoder_seq_length, num_tokens), dtype='float32')
+        for j, seq in enumerate(X_tests[start:end]):
+            for t, ch in enumerate(seq):
+                if t >= max_encoder_seq_length: break
+                Xb[j, t, token_index[ch]] = 1.
+            if len(seq) < max_encoder_seq_length:
+                Xb[j, len(seq):, token_index['*']] = 1.
 
-    print("c2")
+        # encode batch states
+        h_batch, c_batch = encoder_model.predict(Xb, verbose=1)
+
+        # decode each sample with EOS + max-length guard
+        for h_arr, c_arr in zip(h_batch, c_batch):
+            decoded_sentence = ''
+            target_seq = np.zeros((1, 1, num_tokens), dtype='float32')
+            target_seq[0, 0, token_index['&']] = 1.
+            h, c = h_arr[np.newaxis, :], c_arr[np.newaxis, :]
+
+            for _ in range(max_decoder_seq_length):
+                out_tokens, h, c = decoder_model.predict([target_seq, h, c], verbose=1)
+                sampled_i = int(np.argmax(out_tokens[0, -1, :]))
+                sampled_char = reverse_target_char_index[sampled_i]
+                if sampled_char == '$':
+                    break
+                decoded_sentence += sampled_char
+                target_seq = np.zeros((1, 1, num_tokens), dtype='float32')
+                target_seq[0, 0, sampled_i] = 1.
+
+            results.append(decoded_sentence)
+
+        print(f"  ✓ Finished batch up to sample {end}/{total}")
+
+    # ─── 7) Save results ────────────────────────────────────────────
+    os.makedirs('output', exist_ok=True)
+    with open('output/results.pkl', 'wb') as f:
+        pickle.dump(results, f)
+    print("✔ All decoded results saved to output/results.pkl")
+
     return results
-
-#dl = sdp.get_xy_data("../sandhi/Data/sandhiset.txt")
-#dtrain, dtest = train_test_split(dl, test_size=0.2, random_state=1)
-#train_sandhi_split(dtrain, dtest, 0)
