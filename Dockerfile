@@ -18,4 +18,4 @@ COPY . .
 
 # Set the default command to run the script
 # Ensure the script path is correct relative to the WORKDIR
-CMD ["python", "utils/sandhi/sandhi_vicceda.py"] 
+CMD ["python", "utils/sandhi/main.py"] 
