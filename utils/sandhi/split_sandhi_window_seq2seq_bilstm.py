@@ -6,96 +6,88 @@ import faulthandler
 faulthandler.enable()
 
 import numpy as np
+import tensorflow as tf
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import (
     Input, LSTM, Dense, Bidirectional,
     Concatenate, Dropout
 )
+from sklearn.model_selection import train_test_split
+import train_test_data_prepare as sdp
+
 
 def train_sandhi_split(dtrain, dtest, mode):
     # ─── Hyperparameters ─────────────────────────────────────────────
-    batch_size = 128   # Batch size for training.
-    epochs     = 1     # Number of epochs to train for.
-    latent_dim = 128   # Latent dimensionality of the encoding space.
-    INF_BS     = 512   # Batch size for inference.
+    TRAIN_BS   = 128    # training batch size
+    INF_BS     = 512   # inference batch size
+    EPOCHS     = 40     # training epochs
+    LATENT_DIM = 128   # LSTM hidden size
 
-    # ─── 1) Build character set from train+test ──────────────────────
+    # ─── 1) Build char set from train+test ──────────────────────────
     input_texts, target_texts = [], []
     X_tests, Y_tests = [], []
     chars = set()
-
     for src, join, inp, *rest in dtrain:
         tgt = '&' + src + '+' + join + '$'
-        input_texts.append(inp)
-        target_texts.append(tgt)
-        chars.update(inp)
-        chars.update(tgt)
-
+        input_texts.append(inp); target_texts.append(tgt)
+        chars.update(inp); chars.update(tgt)
     for src, join, inp, *rest in dtest:
         tgt = '&' + src + '+' + join + '$'
-        X_tests.append(inp)
-        Y_tests.append(tgt)
-        chars.update(inp)
-        chars.update(tgt)
-
+        X_tests.append(inp); Y_tests.append(tgt)
+        chars.update(inp); chars.update(tgt)
     chars.add('*')
     characters = sorted(chars)
     num_tokens = len(characters)
-    token_index = {c: i for i, c in enumerate(characters)}
-    reverse_target_char_index = {i: c for c, i in token_index.items()}
+    token_index = {c:i for i,c in enumerate(characters)}
+    reverse_target_char_index = {i:c for c,i in token_index.items()}
 
-    max_encoder_seq_length = max(len(s) for s in input_texts)
-    max_decoder_seq_length = max(len(s) for s in target_texts)
+    max_enc = max(len(s) for s in input_texts)
+    max_dec = max(len(s) for s in target_texts)
 
-    print('Number of samples:', len(input_texts))
-    print('Number of unique tokens:', num_tokens)
-    print('Max sequence length for inputs:', max_encoder_seq_length)
-    print('Max sequence length for outputs:', max_decoder_seq_length)
+    print(f"Samples: {len(input_texts)}, Vocab: {num_tokens}, Enc_len: {max_enc}, Dec_len: {max_dec}")
 
     # ─── 2) One‐hot encode training data ─────────────────────────────
     N = len(input_texts)
-    encoder_input_data = np.zeros((N, max_encoder_seq_length, num_tokens), dtype='float32')
-    decoder_input_data = np.zeros((N, max_decoder_seq_length, num_tokens), dtype='float32')
-    decoder_target_data = np.zeros((N, max_decoder_seq_length, num_tokens), dtype='float32')
-
+    enc_in = np.zeros((N, max_enc, num_tokens), dtype='float32')
+    dec_in = np.zeros((N, max_dec, num_tokens), dtype='float32')
+    dec_tr = np.zeros((N, max_dec, num_tokens), dtype='float32')
     for i, (inp, tgt) in enumerate(zip(input_texts, target_texts)):
-        # encoder
         for t, ch in enumerate(inp):
-            encoder_input_data[i, t, token_index[ch]] = 1.
-        encoder_input_data[i, len(inp):, token_index['*']] = 1.
-
-        # decoder input & target (shifted)
+            enc_in[i,t,token_index[ch]] = 1.
+        enc_in[i,len(inp):,token_index['*']] = 1.
         for t, ch in enumerate(tgt):
-            decoder_input_data[i, t, token_index[ch]] = 1.
-            if t > 0:
-                decoder_target_data[i, t - 1, token_index[ch]] = 1.
-        decoder_input_data[i, len(tgt):, token_index['*']] = 1.
-        decoder_target_data[i, len(tgt):, token_index['*']] = 1.
+            dec_in[i,t,token_index[ch]] = 1.
+            if t>0:
+                dec_tr[i,t-1,token_index[ch]] = 1.
+        dec_in[i,len(tgt):,token_index['*']] = 1.
+        dec_tr[i,len(tgt):,token_index['*']] = 1.
 
-    # ─── 3) Define seq2seq model ───────────────────────────────────
-    encoder_inputs = Input(shape=(None, num_tokens), name='encoder_inputs')
-    encoder = Bidirectional(
-        LSTM(latent_dim, return_state=True, dropout=0.5),
+    # ─── 3) Build seq2seq model ────────────────────────────────────
+    # Encoder
+    enc_inputs = Input(shape=(None, num_tokens), name='enc_in')
+    bi_enc = Bidirectional(
+        LSTM(LATENT_DIM, return_state=True, dropout=0.5),
         name='encoder_bi'
     )
-    _, fh, fc, bh, bc = encoder(encoder_inputs)
+    _, fh, fc, bh, bc = bi_enc(enc_inputs)
     state_h = Concatenate()([fh, bh])
     state_c = Concatenate()([fc, bc])
-    encoder_states = [state_h, state_c]
+    enc_states = [state_h, state_c]
 
-    decoder_inputs = Input(shape=(None, num_tokens), name='decoder_inputs')
-    decoder_lstm = LSTM(
-        latent_dim * 2,
+    # Decoder
+    dec_inputs = Input(shape=(None, num_tokens), name='dec_in')
+    dec_lstm = LSTM(
+        LATENT_DIM*2,
         return_sequences=True,
         return_state=True,
         dropout=0.5,
         name='decoder_lstm'
     )
-    dec_out, _, _ = decoder_lstm(decoder_inputs, initial_state=encoder_states)
-    decoder_dense = Dense(num_tokens, activation='softmax', name='decoder_dense')
-    decoder_outputs = decoder_dense(dec_out)
+    dec_seq, _, _ = dec_lstm(dec_inputs, initial_state=enc_states)
+    dec_dense = Dense(num_tokens, activation='softmax', name='decoder_dense')
+    dec_out = dec_dense(dec_seq)
 
-    model = Model([encoder_inputs, decoder_inputs], decoder_outputs, name='seq2seq')
+    model = Model([enc_inputs, dec_inputs], dec_out, name='seq2seq')
     model.compile(
         optimizer='rmsprop',
         loss='categorical_crossentropy',
@@ -103,78 +95,115 @@ def train_sandhi_split(dtrain, dtest, mode):
     )
     model.summary()
 
-    # ─── 4) Train ───────────────────────────────────────────────────
+    # ─── 4) Train ─────────────────────────────────────────────────
     model.fit(
-        [encoder_input_data, decoder_input_data],
-        decoder_target_data,
-        batch_size=batch_size,
-        epochs=epochs,
+        [enc_in, dec_in], dec_tr,
+        batch_size=TRAIN_BS,
+        epochs=EPOCHS,
         validation_split=0.1,
         verbose=1
     )
     model.save('bis2s.h5')
-    print("✔ Trained model saved to bis2s.h5")
+    print("✔ Model trained and saved")
 
-    # ─── 5) Build inference sub-models ──────────────────────────────
-    encoder_model = Model(encoder_inputs, encoder_states, name='encoder_model')
-
-    state_h_in = Input(shape=(latent_dim * 2,), name='state_h')
-    state_c_in = Input(shape=(latent_dim * 2,), name='state_c')
-    dec_out2, h2, c2 = decoder_lstm(decoder_inputs, initial_state=[state_h_in, state_c_in])
-    dec_out2 = decoder_dense(dec_out2)
+    # ─── 5) Build inference models ─────────────────────────────────
+    encoder_model = Model(enc_inputs, enc_states, name='encoder_model')
+    s_h = Input(shape=(LATENT_DIM*2,), name='s_h')
+    s_c = Input(shape=(LATENT_DIM*2,), name='s_c')
+    out2, h2, c2 = dec_lstm(dec_inputs, initial_state=[s_h, s_c])
+    out2 = dec_dense(out2)
     decoder_model = Model(
-        [decoder_inputs, state_h_in, state_c_in],
-        [dec_out2, h2, c2],
+        [dec_inputs, s_h, s_c],
+        [out2, h2, c2],
         name='decoder_model'
     )
-    print("✔ Sampling models ready")
+    print("✔ Inference models ready")
 
-    # ─── 6) Batched inference ───────────────────────────────────────
+    # ─── 6) Batch decoding with tf.while_loop ──────────────────────
+    @tf.function
+    def decode_batch(h0, c0):
+        batch_sz = tf.shape(h0)[0]
+        eos_id   = tf.constant(token_index['$'], tf.int32)
+
+        # finished flags
+        finished = tf.zeros((batch_sz,), tf.bool)
+        # initial input tokens = '&'
+        next_id  = tf.fill((batch_sz,), token_index['&'])
+        # TensorArray to collect outputs
+        ta       = tf.TensorArray(tf.int32, size=max_dec)
+        h, c     = h0, c0
+        t        = tf.constant(0)
+
+        def cond(t, finished, h, c, ta, next_id):
+            return tf.logical_and(t < max_dec,
+                                  tf.logical_not(tf.reduce_all(finished)))
+
+        def body(t, finished, h, c, ta, next_id):
+            # one-hot encode next_id
+            inp = tf.one_hot(next_id, num_tokens)        # [B, num_tokens]
+            inp = tf.expand_dims(inp, 1)                 # [B,1,num_tokens]
+            out, h_new, c_new = decoder_model([inp, h, c], training=False)
+            logits        = out[:,0,:]                   # [B, num_tokens]
+            next_id_new   = tf.cast(tf.argmax(logits, -1), tf.int32)
+            ta            = ta.write(t, next_id_new)
+            # update finished
+            finished_new  = tf.logical_or(finished,
+                                          tf.equal(next_id_new, eos_id))
+            return (t+1,
+                    finished_new,
+                    h_new,
+                    c_new,
+                    ta,
+                    next_id_new)
+
+        t_final, finished_final, h_final, c_final, ta_final, _ = tf.while_loop(
+            cond, body,
+            [t, finished, h, c, ta, next_id],
+            maximum_iterations=max_dec
+        )
+        # stack and transpose to [B, T]
+        tokens = ta_final.stack()             # [T, B]
+        tokens = tf.transpose(tokens, [1,0]) # [B, T]
+        return tokens
+
+    # ─── 7) Infer in batches ────────────────────────────────────────
     total = len(X_tests)
     results = []
     print(f"▶ Inference on {total} samples in batches of {INF_BS}")
     for start in range(0, total, INF_BS):
-        end = min(start + INF_BS, total)
+        end = min(start+INF_BS, total)
         print(f"  • Encoding batch {start}-{end-1} of {total}")
 
-        # one-hot encode this batch
-        batch_size = end - start
-        Xb = np.zeros((batch_size, max_encoder_seq_length, num_tokens), dtype='float32')
+        # build one-hot encoder input
+        B = end - start
+        Xb = np.zeros((B, max_enc, num_tokens), dtype='float32')
         for j, seq in enumerate(X_tests[start:end]):
             for t, ch in enumerate(seq):
-                if t >= max_encoder_seq_length: break
-                Xb[j, t, token_index[ch]] = 1.
-            if len(seq) < max_encoder_seq_length:
-                Xb[j, len(seq):, token_index['*']] = 1.
+                if t>=max_enc: break
+                Xb[j,t,token_index[ch]] = 1.
+            if len(seq)<max_enc:
+                Xb[j,len(seq):,token_index['*']] = 1.
 
-        # encode batch states
-        h_batch, c_batch = encoder_model.predict(Xb, verbose=1)
+        # encode to states
+        h_batch, c_batch = encoder_model.predict(Xb, verbose=0)
+        # batch decode
+        decoded_ids = decode_batch(tf.constant(h_batch), tf.constant(c_batch)).numpy()
 
-        # decode each sample with EOS + max-length guard
-        for h_arr, c_arr in zip(h_batch, c_batch):
-            decoded_sentence = ''
-            target_seq = np.zeros((1, 1, num_tokens), dtype='float32')
-            target_seq[0, 0, token_index['&']] = 1.
-            h, c = h_arr[np.newaxis, :], c_arr[np.newaxis, :]
-
-            for _ in range(max_decoder_seq_length):
-                out_tokens, h, c = decoder_model.predict([target_seq, h, c], verbose=1)
-                sampled_i = int(np.argmax(out_tokens[0, -1, :]))
-                sampled_char = reverse_target_char_index[sampled_i]
-                if sampled_char == '$':
+        # convert each row of ids to string
+        for row in decoded_ids:
+            s = []
+            for idx in row:
+                if idx == token_index['$']:
                     break
-                decoded_sentence += sampled_char
-                target_seq = np.zeros((1, 1, num_tokens), dtype='float32')
-                target_seq[0, 0, sampled_i] = 1.
-
-            results.append(decoded_sentence)
+                s.append(reverse_target_char_index[int(idx)])
+            results.append(''.join(s))
 
         print(f"  ✓ Finished batch up to sample {end}/{total}")
 
-    # ─── 7) Save results ────────────────────────────────────────────
+    # ─── 8) Save results ────────────────────────────────────────────
     os.makedirs('output', exist_ok=True)
-    with open('output/results.pkl', 'wb') as f:
+    with open('output/results.pkl','wb') as f:
         pickle.dump(results, f)
-    print("✔ All decoded results saved to output/results.pkl")
+    print("✔ Results saved to output/results.pkl")
 
     return results
